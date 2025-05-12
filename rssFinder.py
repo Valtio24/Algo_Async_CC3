@@ -1,13 +1,14 @@
 import asyncio
 import feedparser
 import aiohttp
+import time
 
 
 # Fonction asynchrone qui va chercher un flux RSS
 async def parse_feed(session, url):
     try:
         # on fait une requete HTTP GET vers le flux(timeout sert a passer les requetes qui ont une erreur )
-        async with session.get(url, timeout=10) as response:
+        async with session.get(url) as response:
             data = await response.read()  # on lit les donné
             feed = feedparser.parse(data)  # on parse le xml du RSS
             articles = []  # liste où on va stocker les article
@@ -28,11 +29,10 @@ async def parse_feed(session, url):
 
 
 # Fonction pour chercher des articles qui contiennent un mot-clé
-async def rss_finder(keyword):
+async def rss_finder(keywords):
     # on lit la liste des URLs RSS dans un fichier texte
     with open('rss_list.txt', 'r', encoding='utf-8') as f:
         rss_urls = [line.strip() for line in f if line.strip()]
-
     # on ouvre une session HTTP aiohttp
     async with aiohttp.ClientSession() as session:
         tasks = []  # on stocke toutes les taches async à faire
@@ -43,12 +43,22 @@ async def rss_finder(keyword):
 
         results = await asyncio.gather(*tasks)  # on lance tout en meme temp
 
-        # on filtre les articles
-        for articles in results:
-            for article in articles:
+        # on fusionne tous les article dans une seule liste
+        all_articles = [article for group in results for article in group]
+
+        # maintenant on cherche les mot clés dans les article
+        for keyword in keywords:
+            print(f"Résultats pour : '{keyword}'")
+            found = False  # flag si on trouve ou pas
+
+            for article in all_articles:
                 if keyword.lower() in article["title"].lower() or keyword.lower() in article["summary"].lower():
                     print(f"{article['title']} ({article['published']})")
                     print(f"🔗 {article['link']}")
+                    found = True
+
+            if not found:
+                print("Aucun article trouvé.")
 
 
 # Mode synchrone (en vrai c’est juste un faux synchrone, on utilise quand meme async)
@@ -57,29 +67,25 @@ def final_no_async():
     keyword_2 = input("Donnez  moi un autre mot-clé : ")
     keyword_3 = input("donnez moi un dernier mot-clé : ")
 
-    # on lance chaque recherche une par une (donc pas en paralelle)
-    asyncio.run(rss_finder(keyword_3))
-    asyncio.run(rss_finder(keyword_2))
-    asyncio.run(rss_finder(keyword_1))
+    keywords = [keyword_1, keyword_2, keyword_3]
+
+    # on lance la recherche (1 seul coup)
+    asyncio.run(rss_finder(keywords))
 
 
-# Mode asynchrone : toutes les recherches sont lancees en même temps
+# Mode asynchrone : toutes les recherches sont faites en meme temp
 async def final():
     keyword_1 = input("Bonjour donnez moi un mot-clé : ")
     keyword_2 = input("Donnez  moi un autre mot-clé : ")
     keyword_3 = input("donnez moi un dernier mot-clé : ")
 
-    # les trois rss_finder sont exécuté en parallele
-    await asyncio.gather(
-        rss_finder(keyword_1),
-        rss_finder(keyword_2),
-        rss_finder(keyword_3)
-    )
+    keywords = [keyword_1, keyword_2, keyword_3]
+
+    # on lance la recherche (1 seul coup)
+    await rss_finder(keywords)
 
 
-import time
-
-
+# fonction principal
 def main():
     y = input("Voulez vous lancer en asynchrone ? ").strip().lower()
 
@@ -98,7 +104,7 @@ def main():
         print(f'Time taken: {elapsed:.6f} seconds')
 
     else:
-        print("Je n'ai pas compris la réponse, pouvez vous répondre seulement pour oui ou non ?")
+        print("Je n'ai pas compris la réponse, pouvez vous répondre seulement par oui ou non ?")
         main()
 
 
